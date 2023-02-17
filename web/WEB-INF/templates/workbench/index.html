@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+<meta charset="UTF-8">
+
+<link th:href="@{/static/jquery/bootstrap_3.3.0/css/bootstrap.min.css}" type="text/css" rel="stylesheet" />
+<link th:href="@{/static/jquery/bootstrap-datetimepicker-master/css/bootstrap-datetimepicker.min.css}" type="text/css" rel="stylesheet" />
+
+<script type="text/javascript" th:src="@{/static/jquery/jquery-1.11.1-min.js}"></script>
+<script type="text/javascript" th:src="@{/static/jquery/bootstrap_3.3.0/js/bootstrap.min.js}"></script>
+<script type="text/javascript" th:src="@{/static/jquery/bootstrap-datetimepicker-master/js/bootstrap-datetimepicker.js}"></script>
+<script type="text/javascript" th:src="@{/static/jquery/bootstrap-datetimepicker-master/locale/bootstrap-datetimepicker.zh-CN.js}"></script>
+<script type="text/javascript" th:src="@{/static/jquery/vue.js}"></script>
+<script type="text/javascript" th:src="@{/static/jquery/axios.min.js}"></script>
+<script type="text/javascript">
+	$(function () {
+		//创建vue对象
+		var vue=new Vue({
+			el:'#content',
+			data:{
+				id:'1',
+				money:'',
+				orderList:[],
+				balanceHistoryList:[],
+
+				//消费参数
+				spendingMoney:'',
+
+				//退款参数
+				orderId:'',
+				orderMoney:'',
+				balanceId:''
+			},
+			methods:{
+				queryBalance:function () {
+					axios({
+						url:'/workbench/queryBalance',
+						method:'post',
+						params:{
+							id:this.id
+						}
+					})
+					.then(function (value) {
+						vue.money=value.data;
+					});
+				},
+				alterBalance:function () {
+					axios({
+						url:'/workbench/alterBalance',
+						method:'post',
+						params:{
+							id:this.id,
+							money:this.spendingMoney
+						}
+					})
+					.then(function (value) {
+						if(value.data.code=="1"){
+							//刷新余额
+							vue.queryBalance();
+							//刷新订单记录列表
+							var tranHtml="";
+							tranHtml+="<tr id=\"tr_"+value.data.retObject.id+"\">";
+							tranHtml+="<td money=\"money\">"+value.data.retObject.money+"</td>";
+							tranHtml+="<td balanceId=\"balanceId\">"+value.data.retObject.balanceId+"</td>";
+							tranHtml+="<td><button value=\""+value.data.retObject.id+"\" type=\"button\" class=\"btn btn-default\">退款</button></td>";
+							tranHtml+="</tr>";
+							$("#tranHistoryTbody").append(tranHtml);
+							//提示
+							alert("消费成功！");
+						}
+					});
+				},
+				queryOrderAll:function () {
+					axios({
+						url:'/workbench/queryOrderAll',
+						method:'post'
+					})
+					.then(function (value) {
+						vue.orderList=value.data;
+					});
+				},
+				alterBalanceForRefund:function () {
+					axios({
+						url:'/workbench/alterBalanceForRefund',
+						method:'post',
+						params:{
+							id:this.orderId,
+							money:this.orderMoney,
+							balanceId:this.balanceId
+						}
+					})
+					.then(function (value) {
+						if(value.data.code=="1"){
+							//刷新余额
+							vue.queryBalance();
+							//刷新订单列表
+							$("#tr_"+vue.orderId).remove();
+							//提示
+							alert("退款成功！");
+						}else{
+							alert(value.data.message);
+						}
+					});
+				},
+				queryBalanceHistoryAllById:function () {
+					axios({
+						url:'/workbench/queryBalanceHistoryAllById',
+						method:'post',
+						params:{
+							id:this.id
+						}
+					})
+					.then(function (value) {
+						vue.balanceHistoryList=value.data;
+					});
+				}
+			}
+		});
+
+		//刷新余额
+		vue.queryBalance();
+		//刷新订单
+		vue.queryOrderAll();
+
+		//给消费按钮添加单击事件
+		$("#spendingBtn").click(function () {
+			if(vue.spendingMoney==""){
+				return;
+			}
+			vue.alterBalance();
+		});
+
+		//给退款按钮添加单击事件
+		$("#tranHistoryTbody").on("click","button",function () {
+			//获取参数
+			vue.orderId=this.value;
+			vue.orderMoney=$("#tr_"+vue.orderId+" td[money='money']").text();
+			vue.balanceId=$("#tr_"+vue.orderId+" td[balanceId='balanceId']").text();
+			//退款
+			vue.alterBalanceForRefund();
+		});
+
+		//给查看明细按钮添加单击事件
+		$("#queryBalanceHistoryBtn").click(function () {
+			//查询余额变动明细
+			vue.queryBalanceHistoryAllById();
+			//显示模态窗口
+			$("#findMarketBalanceHistory").modal("show");
+		});
+	})
+</script>
+
+</head>
+<body>
+<div id="content">
+	<!-- 查找余额变动明细 -->
+	<div class="modal fade" id="findMarketBalanceHistory" role="dialog">
+		<div class="modal-dialog" role="document" style="width: 80%;">
+			<div class="modal-content">
+				<div class="modal-header">
+					<button type="button" class="close" data-dismiss="modal">
+						<span aria-hidden="true">×</span>
+					</button>
+					<h4 class="modal-title">查看余额变动明细</h4>
+				</div>
+				<div class="modal-body">
+					<table id="activityTable3" class="table table-hover" style="width: 900px; position: relative;top: 10px;">
+						<thead>
+							<tr style="color: #B3B3B3;">
+								<td>金额</td>
+								<td>交易类型</td>
+								<td>交易人</td>
+							</tr>
+						</thead>
+						<tbody>
+							<tr v-for="balanceHistory in balanceHistoryList">
+								<td>{{balanceHistory.money}}</td>
+								<td>{{balanceHistory.status=="0" ? "消费" : "退款"}}</td>
+								<td>{{balanceHistory.balanceId}}</td>
+							</tr>
+						</tbody>
+					</table>
+				</div>
+			</div>
+		</div>
+	</div>
+
+	<div style="position:  relative; left: 30px;">
+		<h3>余额：<span>{{money}}</span></h3>
+	  	<div style="position: relative; top: -40px; left: 70%;">
+			<div class="form-group">
+				<div class="input-group">
+					<div class="input-group-addon">消费金额</div>
+					<input class="form-control" type="text" v-model="spendingMoney">
+				</div>
+			</div>
+			<button id="spendingBtn" type="button" class="btn btn-primary">消费</button>
+			<button id="queryBalanceHistoryBtn" type="button" class="btn btn-default">查看余额变动明细</button>
+		</div>
+
+		<div>
+			<div style="position: relative; left: 10px; top: -10px;">
+				<div class="page-header">
+					<h3>订单列表</h3>
+				</div>
+			</div>
+		</div>
+
+		<div style="position: relative;top: 10px;">
+			<table class="table table-hover">
+				<thead>
+					<tr style="color: #B3B3B3;">
+						<td>订单金额</td>
+						<td>订单人</td>
+						<td>操作</td>
+					</tr>
+				</thead>
+				<tbody id="tranHistoryTbody">
+					<tr :id="'tr_'+order.id" v-for="order in orderList">
+						<td money="money">{{order.money}}</td>
+						<td balanceId="balanceId">{{order.balanceId}}</td>
+						<td><button :value="order.id" type="button" class="btn btn-default">退款</button></td>
+					</tr>
+				</tbody>
+			</table>
+		</div>
+		<hr style="position: relative; top: -40px;">
+	</div>
+</div>
+</body>
+</html>
